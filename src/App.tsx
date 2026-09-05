@@ -1,15 +1,14 @@
 import { useEffect, useState } from "react";
 import type { PackedSDP } from "./types";
 import { ConnectionManager } from "./webrtc/ConnectionManager";
+import { BitPacker } from "./compression/BitPacker";
+import { FSKAudioModem } from "./audio/FSKAudioModem";
 
 export async function createHandshake(): Promise<PackedSDP> {
   const connection = new ConnectionManager();
 
   const packedOffer = await connection.createOffer();
   connection.close();
-
-  // const encoded = BitPacker.encode(packedOffer);
-  // await modem.transmit(encoded);
 
   return packedOffer;
 }
@@ -20,6 +19,29 @@ export async function createHandshake(): Promise<PackedSDP> {
 function App() {
   const [packedOffer, setPackedOffer] = useState<PackedSDP | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [isTransmitting, setIsTransmitting] = useState(false);
+  const [transmitted, setTransmitted] = useState(false);
+
+  const transmitOffer = async () => {
+    if (!packedOffer || isTransmitting) {
+      return;
+    }
+
+    setError(null);
+    setTransmitted(false);
+    setIsTransmitting(true);
+
+    try {
+      const modem = new FSKAudioModem();
+      await modem.transmit(BitPacker.encode(packedOffer));
+      setTransmitted(true);
+    } catch (err) {
+      console.error("Failed to transmit offer:", err);
+      setError("Failed to transmit audio.");
+    } finally {
+      setIsTransmitting(false);
+    }
+  };
 
   useEffect(() => {
     let isMounted = true;
@@ -57,6 +79,16 @@ function App() {
         ) : (
           <p>Creating packed offer...</p>
         )}
+
+        <button
+          type="button"
+          onClick={transmitOffer}
+          disabled={!packedOffer || isTransmitting}
+        >
+          {isTransmitting ? "Transmitting..." : "Transmit audio"}
+        </button>
+
+        {transmitted && <p>Audio transmission complete.</p>}
       </div>
     </div>
   );
